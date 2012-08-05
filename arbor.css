@@ -1,0 +1,9 @@
+.Arborescence {
+	position:relative;
+}
+
+.arbornode {
+	position:absolute;
+	border-radius:5px;
+	padding:1px 5px;
+}

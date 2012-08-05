@@ -50,9 +50,6 @@
 	function TreeNode(properties/*id, parent, content, width, height, color, borderColor*/, tree) {
 		if(properties.id != -1) { //No div needed for the root node
 			var div = this.div = document.createElement("div"); //Create the div
-			div.style.position = "absolute";
-			div.style.borderRadius = "5px";
-			div.style.padding = "1px 5px";
 			div.key = properties.id;
 			div.className = "arbornode";
 			div.innerHTML = properties.text;
@@ -116,7 +113,6 @@
 		}
 		this.container = el;
 		el.className += " Arborescence";
-		el.style.position = "relative";
 		this.canvasoffsetTop = this.canvasoffsetLeft = 0;
 		this.rootYOffset = this.rootXOffset = 0;
 		this.maxLevelHeight = []; this.maxLevelWidth = []; this.previousLevelNode = []; this.nDatabaseNodes = []; this.mapIDs = {};
@@ -131,6 +127,7 @@
 			}
 		}
 		this.canvas = document.createElement('canvas');
+		this.canvas.style.top = this.canvas.style.left = "0px";
 		this.canvas.style.position = "absolute";
 		if (window.G_vmlCanvasManager) { // For Internet Explorer less than version 9, have excanvas initialize the canvas method
 			this.canvas = G_vmlCanvasManager.initElement(this.canvas);

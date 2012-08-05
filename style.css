@@ -1,0 +1,35 @@
+body {
+	padding: 0px;
+	margin: 0px;
+}
+
+header {
+	text-align:center;
+	font-size:x-large;
+	font-weight:bold;
+}
+
+.container {
+	width:1024px;
+	margin-left:auto;
+	margin-right:auto;
+}
+
+.content {
+	padding-top:5px;
+	text-align:center;
+}
+
+.content > div {
+	width:50%;
+	display:inline-block;
+}
+
+#output {
+	display:inline-block;
+	margin-left:auto;
+	margin-right:auto;
+	box-shadow: 0 0 5px 5px #888;
+	background-color:lightgray;
+	border-radius:5px;
+}

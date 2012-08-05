@@ -2,51 +2,33 @@
 <html>
 <head>
 	<meta charset=utf-8 />
-	<style>
-		body {
-			padding: 0px;
-			margin: 0px;
-		}
-
-		.test {
-			z-index:5;
-			height:20px;
-			width: 100%;
-			background-color:black;
-			color:white;
-			text-align:center;
-		}
-
-		.test > div {
-			width:50%;
-			float:left;
-		}
-	</style>
+	<link rel=stylesheet type=text/css href=style.css />
+	<link rel=stylesheet type=text/css href=arbor.css />
 </head>
 <body>
-	<div id=options class=test>
-		<div>
-			Orientation:
-			<label><input type=radio name=orientation value=top checked>Top</label>
-			<label><input type=radio name=orientation value=bottom     >Bottom</label>
-			<label><input type=radio name=orientation value=left       >Left</label>
-			<label><input type=radio name=orientation value=right      >Right</label>
+	<div class=container>
+		<header>Arboresence Test: Countries</header>
+		<form id=options class=content>
+			<input id=add type=button value="Add to tree"  />
+			<input id=fix type=button value="Fix the tree" /><br/>
+			<div>
+				Orientation:
+				<label><input type=radio name=orientation value=top checked>Top</label>
+				<label><input type=radio name=orientation value=bottom     >Bottom</label>
+				<label><input type=radio name=orientation value=left       >Left</label>
+				<label><input type=radio name=orientation value=right      >Right</label>
+			</div>
+			<div>
+				Justification:
+				<label><input type=radio name=justify value=top checked>Top</label>
+				<label><input type=radio name=justify value=center     >Center</label>
+				<label><input type=radio name=justify value=bottom     >Bottom</label>
+			</div>
+		</form>
+		<div class=content>
+			<div id=output></div>
 		</div>
-		<div>
-			Justification:
-			<label><input type=radio name=justify value=top checked>Top</label>
-			<label><input type=radio name=justify value=center     >Center</label>
-			<label><input type=radio name=justify value=bottom     >Bottom</label>
-		</div>
-		<span style="clear:both"></span>
 	</div>
-	<div class=test>
-		<input id=add type=button value="Add to tree"  />
-		<input id=fix type=button value="Fix the tree" />
-		<span style="clear:both"></span>
-	</div>
-	<div id=output></div>
-
 	<script src=tree.js></script>
 	<script src=test.js></script>
 </body>
