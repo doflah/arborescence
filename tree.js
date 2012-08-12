@@ -1,23 +1,5 @@
 (function(){
 	/* Utilities */
-	function camelCase(strMatch, p1) {
-		return p1.toUpperCase();
-	}
-	function getCSSSize(/*args*/){
-		var sum = 0, style, i = arguments.length;
-		if(document.defaultView && document.defaultView.getComputedStyle){
-			style = document.defaultView.getComputedStyle(this, "");
-			while(i-->0) {
-				sum += parseInt(style.getPropertyValue(arguments[i]), 10);
-			}
-		}
-		else if(this.currentStyle){
-			while(i-->0) {
-				sum += parseInt(this.currentStyle[arguments[i].replace(/\-(\w)/g, camelCase)], 10);
-			}
-		}
-		return sum;
-	}
 	function isSelected(el) {
 		return el.isSelected;
 	}
@@ -29,14 +11,10 @@
 			if( --p.count == 0) p.callback();
 		}
 	}
-	function measureNode(node, properties) {
+	function measureNode(node, props) {
 		document.body.appendChild(node.div); //Attach and measure
-		if (!properties.width) {
-			properties.width = getCSSSize.call(node.div, "width", "border-left-width", "border-right-width", "padding-left", "padding-right");
-		}
-		if (!properties.height) {
-			properties.height = getCSSSize.call(node.div, "height", "border-top-width", "border-bottom-width", "padding-top", "padding-bottom");
-		}
+		props.width = props.width || node.div.clientWidth;
+		props.height = props.height || node.div.clientHeight;
 		document.body.removeChild(node.div); //Remove!
 	}
 
