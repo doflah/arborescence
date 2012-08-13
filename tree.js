@@ -28,6 +28,7 @@
 	function TreeNode(properties/*id, parent, content, width, height, color, borderColor*/, tree) {
 		if(properties.id != -1) { //No div needed for the root node
 			var div = this.div = document.createElement("div"); //Create the div
+			div.draggable = true;
 			div.key = properties.id;
 			div.className = "arbornode";
 			div.innerHTML = properties.text;
@@ -110,6 +111,11 @@
 		if (window.G_vmlCanvasManager) { // For Internet Explorer less than version 9, have excanvas initialize the canvas method
 			this.canvas = G_vmlCanvasManager.initElement(this.canvas);
 		}
+		el.addEventListener('dragstart', arborDragStart.bind(this), false);
+		el.addEventListener('dragenter', arborDragEnter.bind(this), false);
+		el.addEventListener('dragover', arborDragOver.bind(this), false);
+		el.addEventListener('drop', arborDrop.bind(this), false);
+		el.addEventListener('dragend', arborDragEnd.bind(this), false);
 	}
 
 	TreeNode.prototype = {
@@ -528,14 +534,24 @@
 			update && this.draw();
 		},
 		moveNode: function moveNode(node, newParent) {
+			var tmpNode, parent;
 			node = this.nDatabaseNodes[this.mapIDs[node]];
-			var parent = node.parent;
-			newParent = this.nDatabaseNodes[this.mapIDs[newParent]];
+			tmpNode = newParent = this.nDatabaseNodes[this.mapIDs[newParent]];
+			if(node.parent == newParent) { return 0; }
+			//first, make sure we are node tipping the tree over.  We can't make a node a child of its descendant
+			while(tmpNode.id != -1) {
+				if(tmpNode.id == node.id) { 
+					return false;
+				}
+				tmpNode = tmpNode.parent;
+			}
+			parent = node.parent;
 			parent.children.splice(parent.children.indexOf(node), 1); //remove from old parent
 			newParent.children.push(node); //put in new parent
 			node.parent = newParent;
 			node.pid = newParent.id;
 			this.draw();
+			return true;
 		},
 		/*searchNodes: function(callback)*/
 		selectNode: function selectNode(nodeid) {
@@ -551,6 +567,67 @@
 			return this.nDatabaseNodes.filter(isSelected);
 		}
 	};
+
+	/* Drag and drop utility functions, bound to the tree */
+	function arborDragStart(e) {
+		e.dataTransfer.setData("text/text", e.target.key);
+	}
+
+	function arborDragOver(e) {
+		if (e.preventDefault) {
+			e.preventDefault(); // Necessary. Allows us to drop.
+		}
+		e.dataTransfer.dropEffect = 'copy';
+		return false;
+	}
+
+	function arborDragEnter(e) {
+		if (e.target === this.container || e.target === this.canvas) {
+			var i, len, nodes = this.container.children;
+			for (i = 0, len = nodes.length; i < len; i += 1) {
+				nodes[i].classList.remove('over');
+				nodes[i].classList.remove('good');
+				nodes[i].classList.remove('bad');
+			}
+			return;
+		}
+		var treeNode = e.target.nodeType === Node.TEXT_NODE ? e.target.parentNode : e.target;
+		while (!treeNode.classList.contains("arbornode")) {
+			treeNode = treeNode.parent;
+		}
+		treeNode.classList.add('over');
+
+		return; 
+
+		var node = this.nDatabaseNodes[this.mapIDs[e.dataTransfer.getData("text/text")]];
+		var tmpNode = this.nDatabaseNodes[this.mapIDs[treeNode.key]];
+		//first, make sure we are node tipping the tree over.  We can't make a node a child of its descendant
+		while (tmpNode.id !== -1) {
+			if (tmpNode.id === node.id) { 
+				treeNode.classList.add("bad");
+				return false;
+			}
+			tmpNode = tmpNode.parent;
+		}
+		treeNode.classList.add("good");
+		return false;
+	}
+
+	function arborDrop(e) {
+		if (e.stopPropagation) {
+			e.stopPropagation(); // stops the browser from redirecting.
+		}
+		e.preventDefault();
+		this.moveNode(e.dataTransfer.getData("text/text"), e.target.key);
+		return false;
+	}
+
+	function arborDragEnd(e) {
+		var i, len, nodes = this.container.children;
+		for(i = 0, len = nodes.length; i < len; i += 1) {
+			nodes[i].classList.remove('over');
+		}
+	}
 
 	Arborescence.version = "0.9";
 	window.Arborescence = Arborescence;

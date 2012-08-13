@@ -6,4 +6,15 @@
 	position:absolute;
 	border-radius:5px;
 	padding:1px 5px;
+	-webkit-transition: box-shadow 100ms linear;
+	-moz-transition: box-shadow 100ms linear;
+	-o-transition: box-shadow 100ms linear;
+	transition: box-shadow 100ms linear;
+}
+
+.arbornode.over.bad {
+	box-shadow: 0px 0px 10px 10px pink;
+}
+.arbornode.over.good {
+	box-shadow: 0px 0px 10px 10px lightgreen;
 }
