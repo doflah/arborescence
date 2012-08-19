@@ -1,4 +1,5 @@
-(function(){
+(function (window, document) {
+	"use strict";
 	/* Utilities */
 	function isSelected(el) {
 		return el.isSelected;
@@ -7,9 +8,12 @@
 		var p = this;
 		p.count = count;
 		p.callback = callback;
-		p.decrement = function() {
-			if( --p.count == 0) p.callback();
-		}
+		p.decrement = function () {
+			p.count -= 1;
+			if (p.count === 0) {
+				p.callback();
+			}
+		};
 	}
 	function measureNode(node, props) {
 		document.body.appendChild(node.div); //Attach and measure
@@ -17,54 +21,63 @@
 		props.height = props.height || node.div.clientHeight;
 		document.body.removeChild(node.div); //Remove!
 	}
+	/* Drag and drop utility functions, bound to the tree */
 
-	/* cheap hack to find the vendor prefix.  Until that day.  'Til all are one. */
-	var div = document.createElement("div"), prefixes = ["", "-webkit-", "-moz-", "-ms-", "-o-"], prefix;
-	for(var i = 0; i < prefixes.length; i++) {
-		div.style.background = prefixes[i] + "linear-gradient(left, red, red)";
-		if(div.style.background != "") { prefix = prefixes[i]; break; }
-	}
-
-	function TreeNode(properties/*id, parent, content, width, height, color, borderColor*/, tree) {
-		if(properties.id != -1) { //No div needed for the root node
-			var div = this.div = document.createElement("div"); //Create the div
-			div.draggable = true;
-			div.key = properties.id;
-			div.className = "arbornode";
-			div.innerHTML = properties.text;
-			if(properties.width != null) div.style.width = properties.width + "px";
-			if(properties.height != null) div.style.height = properties.height + "px";
-			if (!properties.width || !properties.height) { // See if we need to calculate the width or the height
-				measureNode(this, properties); //measure
-				//if images are contained in the div, we need to resize when they load
-				var images = div.getElementsByTagName("img"), numImages = images.length, node = this;
-				if(numImages > 0 ) {
-					//TODO: attach the promise to the tree, shared by multiple nodes with images
-					var p = new Promise(numImages, function() {
-						measureNode(node, properties);
-						node.height = properties.height;
-						node.width = properties.width;
-						tree.draw();
-					});
-					node.width = properties.width;
-					node.height = properties.height;
-					delete properties.width;
-					delete properties.height;
-					while(numImages --> 0) {
-						images[numImages].onload = p.decrement;
-					}
+	var dragHandlers  = {
+		start: function (e) {
+			e.dataTransfer.setData("text/text", e.target.key);
+		},
+		over: function (e) {
+			if (e.preventDefault) {
+				e.preventDefault(); // Necessary. Allows us to drop.
+			}
+			e.dataTransfer.dropEffect = 'copy';
+			return false;
+		},
+		enter: function (e) {
+			var i, len, nodes = this.container.children, treeNode, node, tmpNode;
+			if (e.target === this.container || e.target === this.canvas) {
+				for (i = 0, len = nodes.length; i < len; i += 1) {
+					nodes[i].classList.remove('over');
+					nodes[i].classList.remove('good');
+					nodes[i].classList.remove('bad');
 				}
+				return;
+			}
+			treeNode = e.target.nodeType === 3/*Node.TEXT_NODE*/ ? e.target.parentNode : e.target;
+			while (!treeNode.classList.contains("arbornode")) {
+				treeNode = treeNode.parent;
+			}
+			treeNode.classList.add('over');
+
+			node = this.nDatabaseNodes[this.mapIDs[e.dataTransfer.getData("text/text")]];
+			tmpNode = this.nDatabaseNodes[this.mapIDs[treeNode.key]];
+			//first, make sure we are node tipping the tree over.  We can't make a node a child of its descendant
+			while (tmpNode.id !== -1) {
+				if (tmpNode.id === node.id) {
+					treeNode.classList.add("bad");
+					return false;
+				}
+				tmpNode = tmpNode.parent;
+			}
+			treeNode.classList.add("good");
+			return false;
+		},
+		drop: function (e) {
+			if (e.stopPropagation) {
+				e.stopPropagation(); // stops the browser from redirecting.
+			}
+			e.preventDefault();
+			this.moveNode(e.dataTransfer.getData("text/text"), e.target.key);
+			return false;
+		},
+		end: function (e) {
+			var i, len, nodes = this.container.children;
+			for (i = 0, len = nodes.length; i < len; i += 1) {
+				nodes[i].classList.remove('over');
 			}
 		}
-		for(var prop in properties) {
-			this[prop] = properties[prop];
-		}
-		this.XPosition = this.YPosition = this.prelim = this.modifier = 0;
-		this.children = [];
-		this.isCollapsed = this.isSelected = false;
-	}
-
-	var defaults = {
+	}, div = document.createElement("div"), prefixes = ["", "-webkit-", "-moz-", "-ms-", "-o-"], prefix, i, defaults = {
 		nodeColor: "lightgreen",
 		nodeBorder: "1px solid gray",
 		maximumDepth : 100,
@@ -85,45 +98,107 @@
 		chartHeight: -1,
 		chartWidth: -1
 	};
+	/* cheap hack to find the vendor prefix.  Until that day.  'Til all are one. */
+	for (i = 0; i < prefixes.length; i += 1) {
+		div.style.background = prefixes[i] + "linear-gradient(left, red, red)";
+		if (div.style.background !== "") {
+			prefix = prefixes[i];
+			break;
+		}
+	}
+
+	function TreeNode(properties, tree) {
+		var div, prop, images, numImages, node = this, p;
+		if (properties.id !== -1) { //No div needed for the root node
+			this.div = div = document.createElement("div"); //Create the div
+			div.draggable = true;
+			div.key = properties.id;
+			div.className = "arbornode";
+			div.innerHTML = properties.text;
+			if (properties.width) {
+				div.style.width = properties.width + "px";
+			}
+			if (properties.height) {
+				div.style.height = properties.height + "px";
+			}
+			if (!properties.width || !properties.height) { // See if we need to calculate the width or the height
+				measureNode(this, properties); //measure
+				//if images are contained in the div, we need to resize when they load
+				images = div.getElementsByTagName("img");
+				numImages = images.length;
+				if (numImages > 0) {
+					//TODO: attach the promise to the tree, shared by multiple nodes with images
+					p = new Promise(numImages, function () {
+						measureNode(node, properties);
+						node.height = properties.height;
+						node.width = properties.width;
+						tree.draw();
+					});
+					node.width = properties.width;
+					node.height = properties.height;
+					delete properties.width;
+					delete properties.height;
+					while (numImages > 0) {
+						numImages -= 1;
+						images[numImages].onload = p.decrement;
+					}
+				}
+			}
+		}
+		for (prop in properties) {
+			if (properties.hasOwnProperty(prop)) {
+				this[prop] = properties[prop];
+			}
+		}
+		this.XPosition = this.YPosition = this.prelim = this.modifier = 0;
+		this.children = [];
+		this.isCollapsed = this.isSelected = false;
+	}
+
 	function Arborescence(el, options) {
-		var tree = this;
-		for(var i in defaults) {
-			this[i] = options[i] || defaults[i];
+		var tree = this, i;
+		for (i in defaults) {
+			if (defaults.hasOwnProperty(i)) {
+				this[i] = options[i] || defaults[i];
+			}
 		}
 		this.container = el;
 		el.className += " Arborescence";
 		this.canvasoffsetTop = this.canvasoffsetLeft = 0;
 		this.rootYOffset = this.rootXOffset = 0;
-		this.maxLevelHeight = []; this.maxLevelWidth = []; this.previousLevelNode = []; this.nDatabaseNodes = []; this.mapIDs = {};
-		this.root = new TreeNode({id:-1});
+		this.nDatabaseNodes = [];
+		this.mapIDs = {};
+		this.root = new TreeNode({id: -1});
 		this.iSelectedNode = -1;
 		this.iLastSearch = 0;
-		this.root._getLeftSibling = this.root._getRightSibling = function() { return null; }
-		el.onclick = function(e) {
-			var target = e?e.target:event.srcElement;
-			if(target.parentNode == el && target.tagName.toLowerCase() != "canvas") {
+		this.root._getLeftSibling = this.root._getRightSibling = function () {
+			return null;
+		};
+		el.onclick = function (e) {
+			var target = e ? e.target : window.event.srcElement;
+			if (target.parentNode === el && target.tagName.toLowerCase() !== "canvas") {
 				options.click.call(tree, tree.nDatabaseNodes[tree.mapIDs[target.key]]);
 			}
-		}
+		};
 		this.canvas = document.createElement('canvas');
 		this.canvas.style.top = this.canvas.style.left = "0px";
 		this.canvas.style.position = "absolute";
 		if (window.G_vmlCanvasManager) { // For Internet Explorer less than version 9, have excanvas initialize the canvas method
-			this.canvas = G_vmlCanvasManager.initElement(this.canvas);
+			this.canvas = window.G_vmlCanvasManager.initElement(this.canvas);
 		}
-		el.addEventListener('dragstart', arborDragStart.bind(this), false);
-		el.addEventListener('dragenter', arborDragEnter.bind(this), false);
-		el.addEventListener('dragover', arborDragOver.bind(this), false);
-		el.addEventListener('drop', arborDrop.bind(this), false);
-		el.addEventListener('dragend', arborDragEnd.bind(this), false);
+		el.addEventListener('dragstart', dragHandlers.start.bind(this), false);
+		el.addEventListener('dragenter', dragHandlers.enter.bind(this), false);
+		el.addEventListener('dragover', dragHandlers.over.bind(this), false);
+		el.addEventListener('drop', dragHandlers.drop.bind(this), false);
+		el.addEventListener('dragend', dragHandlers.end.bind(this), false);
 	}
 
 	TreeNode.prototype = {
 		constructor: TreeNode,
 		_isAncestorCollapsed: function _isAncestorCollapsed() {
 			return this.parent.isCollapsed ? true :
-				   this.parent.id == -1   ? false :
-					     this.parent._isAncestorCollapsed();
+					this.parent.id === -1   ? false :
+							this.parent._isAncestorCollapsed();
 		},
 		_setAncestorsExpanded: function _setAncestorsExpanded() {
 			if (this.parent.id !== -1) {
@@ -136,11 +211,11 @@
 		},
 		_getLeftSibling: function _getLeftSibling() {
 			var siblings = this.parent.children;
-			return siblings[siblings.indexOf(this)-1];
+			return siblings[siblings.indexOf(this) - 1];
 		},
 		_getRightSibling: function _getRightSibling() {
 			var siblings = this.parent.children;
-			return siblings[siblings.indexOf(this)+1];
+			return siblings[siblings.indexOf(this) + 1];
 		},
 		_getChildrenCenter: function _getChildrenCenter(tree) {
 			var first = this.children[0], last = this._getLastChild();
@@ -150,66 +225,75 @@
 			return this.children[this.children.length - 1];
 		},
 		_getSize: function _getSize(orientation) {
-			return (orientation=="top" || orientation=="bottom") ? this.width:this.height;
+			return (orientation === "top" || orientation === "bottom") ? this.width : this.height;
 		},
 		_drawEdges: function _drawEdges(tree) {
-			var x1, y1, x2, y2, x3, y3, x4, y4, node, direction, ctx = tree.canvas.getContext("2d"), count = this.children.length;
+			var x1, y1, x2, y2, x3, y3, x4, y4, node, direction = 1, ctx = tree.canvas.getContext("2d"), count = this.children.length;
 			ctx.strokeStyle = tree.linkColor;
 
-			if(tree.orientation == "top" || tree.orientation == "left") direction = -1;
-			else direction = 1;
-
-			switch (tree.orientation) {
-				case "bottom": case "top":
-					x1 = this.XPosition + (this.width / 2);
-					y1 = this.YPosition + (tree.orientation == "top" ? this.height : 0);
-					x2 = x1;
-					break;
-				case "right": case "left":
-					y1 = this.YPosition + (this.height / 2);
-					x1 = this.XPosition + (tree.orientation == "left" ? this.width : 0);
-					y2 = y1;
-					break;
+			if (tree.orientation === "top" || tree.orientation === "left") {
+				direction = -1;
 			}
 
-			while (count-->0) {
+			switch (tree.orientation) {
+			case "bottom":
+			case "top":
+				x1 = this.XPosition + (this.width / 2);
+				y1 = this.YPosition + (tree.orientation === "top" ? this.height : 0);
+				x2 = x1;
+				break;
+			case "right":
+			case "left":
+				y1 = this.YPosition + (this.height / 2);
+				x1 = this.XPosition + (tree.orientation === "left" ? this.width : 0);
+				y2 = y1;
+				break;
+			}
+
+			while (count > 0) {
+				count -= 1;
 				node = this.children[count];
 
 				switch (tree.orientation) {
-					case "top": case "bottom":
-						x4 = x3 = node.XPosition + (node.width / 2);
-						y4 = node.YPosition + (tree.orientation == "bottom" ? node.height : 0);
-						switch (tree.nodeJustification) {
-							case "top":
-								y3 = y4 + tree.levelSpacing / 2 * direction;
-								break;
-							case "bottom":
-								y3 = y1 - tree.levelSpacing / 2 * direction;
-								break;
-							case "center":
-								y3 = y4 + (y1 - y4) / 2;
-						}
-						y2 = y3;
+				case "top":
+				case "bottom":
+					x4 = x3 = node.XPosition + (node.width / 2);
+					y4 = node.YPosition + (tree.orientation === "bottom" ? node.height : 0);
+					switch (tree.nodeJustification) {
+					case "top":
+						y3 = y4 + tree.levelSpacing / 2 * direction;
 						break;
-					case "left": case "right":
-						x4 = node.XPosition + (tree.orientation == "right" ? node.width : 0);
-						y4 = y3 = node.YPosition + (node.height / 2);
-						switch (tree.nodeJustification) {
-							case "top":
-								x3 = x4 + tree.levelSpacing / 2 * direction;
-								break;
-							case "bottom":
-								x3 = x1 - tree.levelSpacing / 2 * direction;
-								break;
-							case "center":
-								x3 = x1 + (x4 - x1) / 2;
-						}
-						x2 = x3;
+					case "bottom":
+						y3 = y1 - tree.levelSpacing / 2 * direction;
+						break;
+					case "center":
+						y3 = y4 + (y1 - y4) / 2;
+						break;
+					}
+					y2 = y3;
+					break;
+				case "left":
+				case "right":
+					x4 = node.XPosition + (tree.orientation === "right" ? node.width : 0);
+					y4 = y3 = node.YPosition + (node.height / 2);
+					switch (tree.nodeJustification) {
+					case "top":
+						x3 = x4 + tree.levelSpacing / 2 * direction;
+						break;
+					case "bottom":
+						x3 = x1 - tree.levelSpacing / 2 * direction;
+						break;
+					case "center":
+						x3 = x1 + (x4 - x1) / 2;
+						break;
+					}
+					x2 = x3;
+					break;
 				}
 
 				ctx.save();
 				ctx.beginPath();
-				if(tree.linkType == "M") { //Manhattan
+				if (tree.linkType === "M") { //Manhattan
 					ctx.moveTo(x1, y1);
 					ctx.lineTo(x2, y2);
 					ctx.lineTo(x3, y3);
@@ -217,7 +301,7 @@
 				} else { //Bezier
 					ctx.moveTo(x1, y1);
 					ctx.bezierCurveTo(x2, y2, x3, y3, x4, y4);
-				}					
+				}
 				ctx.stroke();
 				ctx.restore();
 			}
@@ -238,22 +322,22 @@
 			this._setLevelWidth(node, level);
 			this._setNeighbors(node, level);
 
-			if (node._getChildrenCount() == 0 || level == this.maximumDepth) {
+			if (node._getChildrenCount() === 0 || level === this.maximumDepth) {
 				leftSibling = node._getLeftSibling();
-				if (leftSibling != null) {
+				if (leftSibling) {
 					node.prelim = leftSibling.prelim + leftSibling._getSize(this.orientation) + this.siblingSpacing;
 				} else {
 					node.prelim = 0;
 				}
 			} else {
 				n = node._getChildrenCount();
-				for (i = 0; i < n; i++) {
+				for (i = 0; i < n; i += 1) {
 					this._firstWalk(node.children[i], level + 1);
 				}
 
 				midPoint = node._getChildrenCenter(this) - node._getSize(this.orientation) / 2;
 				leftSibling = node._getLeftSibling();
-				if (leftSibling != null) {
+				if (leftSibling) {
 					node.prelim = leftSibling.prelim + leftSibling._getSize(this.orientation) + this.siblingSpacing;
 					node.modifier = node.prelim - midPoint;
 					this._apportion(node, level);
@@ -263,78 +347,79 @@
 			}
 		},
 		_apportion: function _apportion(node, level) {
-			var firstChild = node.children[0], firstChildLeftNeighbor = firstChild.leftNeighbor, j = 1;
-			for (var k = this.maximumDepth - level; firstChild != null && firstChildLeftNeighbor != null && j <= k;) {
-				var modifierSumRight = 0, modifierSumLeft = 0, rightAncestor = firstChild, leftAncestor = firstChildLeftNeighbor;
-				for (var l = 0; l < j; l++) {
+			/* variable declarations.  Oh, for block scope. */
+			var firstChild = node.children[0], firstChildLeftNeighbor = firstChild.leftNeighbor, j = 1, k = this.maximumDepth - level, l, totalGap,
+				modifierSumRight, modifierSumLeft, rightAncestor, leftAncestor,	subtreeAux, numSubtrees, subtreeMoveAux, singleGap;
+			while (firstChild && firstChildLeftNeighbor && j <= k) {
+				modifierSumRight = 0;
+				modifierSumLeft = 0;
+				rightAncestor = firstChild;
+				leftAncestor = firstChildLeftNeighbor;
+				for (l = 0; l < j; l += 1) {
 					rightAncestor = rightAncestor.parent;
 					leftAncestor = leftAncestor.parent;
 					modifierSumRight += rightAncestor.modifier;
 					modifierSumLeft += leftAncestor.modifier;
 				}
 
-				var totalGap = (firstChildLeftNeighbor.prelim + modifierSumLeft + firstChildLeftNeighbor._getSize(this.orientation) + 
+				totalGap = (firstChildLeftNeighbor.prelim + modifierSumLeft + firstChildLeftNeighbor._getSize(this.orientation) +
 								this.iSubtreeSeparation) - (firstChild.prelim + modifierSumRight);
 				if (totalGap > 0) {
-					var subtreeAux = node, numSubtrees = 0;
-					for (; subtreeAux != null && subtreeAux != leftAncestor; subtreeAux = subtreeAux._getLeftSibling()) {
-						numSubtrees++;
+					subtreeAux = node;
+					for (numSubtrees = 0; subtreeAux && subtreeAux !== leftAncestor; subtreeAux = subtreeAux._getLeftSibling()) {
+						numSubtrees += 1;
 					}
 
-					if (subtreeAux != null) {
-						var subtreeMoveAux = node, singleGap = totalGap / numSubtrees;
-						for (; subtreeMoveAux != leftAncestor; subtreeMoveAux = subtreeMoveAux._getLeftSibling()) {
+					if (subtreeAux) {
+						subtreeMoveAux = node;
+						for (singleGap = totalGap / numSubtrees; subtreeMoveAux !== leftAncestor; subtreeMoveAux = subtreeMoveAux._getLeftSibling()) {
 							subtreeMoveAux.prelim += totalGap;
 							subtreeMoveAux.modifier += totalGap;
 							totalGap -= singleGap;
 						}
 					}
 				}
-				j++;
-				if (firstChild._getChildrenCount() == 0) {
-					firstChild = this._getLeftmost(node, 0, j);
-				} else {
-					firstChild = firstChild.children[0];
-				}
-				if (firstChild != null) {
+				j += 1;
+				firstChild = firstChild._getChildrenCount() === 0 ? this._getLeftmost(node, 0, j) : firstChild.children[0];
+				if (firstChild) {
 					firstChildLeftNeighbor = firstChild.leftNeighbor;
 				}
 			}
 		},
 		_secondWalk: function _secondWalk(node, level, X, Y) {
 			if (node && level <= this.maximumDepth) {
-				var xTmp = this.rootXOffset + node.prelim + X, yTmp = this.rootYOffset + Y, 
+				var xTmp = this.rootXOffset + node.prelim + X, yTmp = this.rootYOffset + Y,
 					maxsizeTmp, nodesizeTmp, horizontal = false;
 
 				switch (this.orientation) {
-					case "top": case "bottom":
-						maxsizeTmp = this.maxLevelHeight[level];
-						nodesizeTmp = node.height;
-						break;
-
-					case "right": case "left":
-						maxsizeTmp = this.maxLevelWidth[level];
-						horizontal = true;
-						nodesizeTmp = node.width;
-						break;
+				case "top":
+				case "bottom":
+					maxsizeTmp = this.maxLevelHeight[level];
+					nodesizeTmp = node.height;
+					break;
+				case "right":
+				case "left":
+					maxsizeTmp = this.maxLevelWidth[level];
+					horizontal = true;
+					nodesizeTmp = node.width;
+					break;
 				}
-				if(this.nodeJustification == "center") {
-					yTmp += (maxsizeTmp - nodesizeTmp)/2; // Half the difference between this node and the biggest in the level
-				} else if( this.nodeJustification == "bottom") {
+				if (this.nodeJustification === "center") {
+					yTmp += (maxsizeTmp - nodesizeTmp) / 2; // Half the difference between this node and the biggest in the level
+				} else if (this.nodeJustification === "bottom") {
 					yTmp += (maxsizeTmp - nodesizeTmp); // Offset the difference between this node and the biggest in the level
 				}
-				node.XPosition = horizontal? yTmp:xTmp;
-				node.YPosition = horizontal? xTmp:yTmp;
+				node.XPosition = horizontal ? yTmp : xTmp;
+				node.YPosition = horizontal ? xTmp : yTmp;
 
-				if(this.orientation == "bottom") {
+				if (this.orientation === "bottom") {
 					node.YPosition = -node.YPosition - nodesizeTmp;
-				} else if( this.orientation == "right") {
+				} else if (this.orientation === "right") {
 					node.XPosition = -node.XPosition - nodesizeTmp;
 				}
 
-				if (node._getChildrenCount() != 0) {
-					this._secondWalk(node.children[0], level + 1, X + node.modifier,
-							Y + maxsizeTmp + this.levelSpacing);
+				if (node._getChildrenCount() !== 0) {
+					this._secondWalk(node.children[0], level + 1, X + node.modifier, Y + maxsizeTmp + this.levelSpacing);
 				}
 				this._secondWalk(node._getRightSibling(), level, X, Y);
 
@@ -348,6 +433,7 @@
 			}
 		},
 		_positionTree: function _positionTree() {
+			var i;
 			this.maxLevelHeight = [];
 			this.maxLevelWidth = [];
 			this.previousLevelNode = [];
@@ -355,13 +441,16 @@
 			this._firstWalk(this.root, 0);
 
 			switch (this.orientation) {
-				case "top": case "left":
-					this.rootXOffset = this.topXAdjustment + this.root.XPosition;
-					this.rootYOffset = this.topYAdjustment + this.root.YPosition;
-					break;
-				case "bottom": case "right":
-					this.rootXOffset = this.topXAdjustment + this.root.XPosition;
-					this.rootYOffset = this.topYAdjustment + this.root.YPosition;
+			case "top":
+			case "left":
+				this.rootXOffset = this.topXAdjustment + this.root.XPosition;
+				this.rootYOffset = this.topYAdjustment + this.root.YPosition;
+				break;
+			case "bottom":
+			case "right":
+				this.rootXOffset = this.topXAdjustment + this.root.XPosition;
+				this.rootYOffset = this.topYAdjustment + this.root.YPosition;
+				break;
 			}
 
 			this.topXCorrection = this.topYCorrection = 0;
@@ -369,22 +458,22 @@
 
 			// Adjust for very large trees off of the screen
 			if ((this.topXCorrection > 0) || (this.topYCorrection > 0)) {
-				for(var i = 0; i<this.nDatabaseNodes.length; i++) {
+				for (i = 0; i < this.nDatabaseNodes.length; i += 1) {
 					this.nDatabaseNodes[i].XPosition += this.topXCorrection;
 					this.nDatabaseNodes[i].YPosition += this.topYCorrection;
 				}
 			}
 		},
-		_setLevelHeight: function _setLevelHeight(node, level) {
-			if (this.maxLevelHeight[level] == null) {
+		_setLevelHeight: function _setLevelHeight(node, level) { //TODO
+			if (!this.maxLevelHeight[level]) {
 				this.maxLevelHeight[level] = 0;
 			}
 			if (this.maxLevelHeight[level] < node.height) {
 				this.maxLevelHeight[level] = node.height;
 			}
 		},
-		_setLevelWidth: function _setLevelWidth(node, level) {
-			if (this.maxLevelWidth[level] == null) {
+		_setLevelWidth: function _setLevelWidth(node, level) { //TODO
+			if (!this.maxLevelWidth[level]) {
 				this.maxLevelWidth[level] = 0;
 			}
 			if (this.maxLevelWidth[level] < node.width) {
@@ -402,17 +491,17 @@
 			var i, n = node._getChildrenCount(), leftmostDescendant;
 			if (level >= maxlevel) { return node; }
 
-			for (i = 0; i < n; i++) {
+			for (i = 0; i < n; i += 1) {
 				leftmostDescendant = this._getLeftmost(node.children[i], level + 1, maxlevel);
-				if (leftmostDescendant != null) {
+				if (leftmostDescendant !== null) {
 					return leftmostDescendant;
 				}
 			}
 			return null;
 		},
 		_selectNodeInt: function _selectNodeInt(dbindex, flagToggle) {
-			if (this.selectMode == "single") {
-				if ((this.iSelectedNode != dbindex) && (this.iSelectedNode != -1)) {
+			if (this.selectMode === "single") {
+				if ((this.iSelectedNode !== dbindex) && (this.iSelectedNode !== -1)) {
 					this.nDatabaseNodes[this.iSelectedNode].isSelected = false;
 				}
 				this.iSelectedNode = (this.nDatabaseNodes[dbindex].isSelected && flagToggle) ? -1 : dbindex;
@@ -420,17 +509,17 @@
 			this.nDatabaseNodes[dbindex].isSelected = (flagToggle) ? !this.nDatabaseNodes[dbindex].isSelected : true;
 		},
 		_collapseInternal: function _collapseInternal(flag) {
-			var node = null, n = 0;
-			for (; n < this.nDatabaseNodes.length; n++) {
-				node = this.nDatabaseNodes[n];
+			var node, i;
+			for (i = 0; i < this.nDatabaseNodes.length; i += 1) {
+				node = this.nDatabaseNodes[i];
 				node.isCollapsed = node.children.length && flag;
 			}
 			this.tree();
 		},
 		_selectInternal: function _selectInternal(flag) {
-			var node = null, k = 0;
-			for (; k < this.nDatabaseNodes.length; k++) {
-				node = this.nDatabaseNodes[k];
+			var node, i;
+			for (i = 0; i < this.nDatabaseNodes.length; i += 1) {
+				node = this.nDatabaseNodes[i];
 				node.isSelected = flag;
 			}
 			this.iSelectedNode = -1;
@@ -439,17 +528,20 @@
 		_drawNodes: function _drawNodes() {
 			var fragment = document.createDocumentFragment(), node, color, border, n = this.nDatabaseNodes.length;
 
-			while (n-->0) {
+			while (n > 0) {
+				n -= 1;
 				node = this.nDatabaseNodes[n];
 
 				if (!node._isAncestorCollapsed()) {
-					color = node.isSelected ? this.nodeSelColor: node.color || this.nodeColor;
+					color = node.isSelected ? this.nodeSelColor : node.color || this.nodeColor;
 					node.div.style.top = (node.YPosition + this.canvasoffsetTop) + "px";
 					node.div.style.left = (node.XPosition + this.canvasoffsetLeft) + "px";
 
-					if (typeof color == "function") color = color(node);
+					if (typeof color === "function") {
+						color = color(node);
+					}
 					if (typeof color === "object") { //Array of 2 gradient colors
-						node.div.style.background = prefix + "linear-gradient(left,"+color[0]+","+color[1]+")";
+						node.div.style.background = prefix + "linear-gradient(left," + color[0] + "," + color[1] + ")";
 					} else { //Normal color
 						node.div.style.background = color;
 					}
@@ -466,10 +558,10 @@
 			return fragment;
 		},
 		_calcWidthAndHeight: function _calcWidthAndHeight() {
-
+			var node, n;
 			this.chartWidth = this.chartHeight = 0;
 
-			for (var n = 0, node; n < this.nDatabaseNodes.length; n++) {
+			for (n = 0; n < this.nDatabaseNodes.length; n += 1) {
 				node = this.nDatabaseNodes[n];
 
 				if (!node._isAncestorCollapsed()) {
@@ -485,13 +577,15 @@
 			var width, height, container = this.container;
 
 			// Empty the tree container so we can refill it
-			while (container.hasChildNodes()) container.removeChild( container.firstChild );
+			while (container.hasChildNodes()) {
+				container.removeChild(container.firstChild);
+			}
 
 			this._positionTree();
 			this._calcWidthAndHeight();
 
-			width = this.divWidth ? this.divWidth : this.chartWidth;
-			height = this.divHeight ? this.divHeight : this.chartHeight;
+			width = this.divWidth || this.chartWidth;
+			height = this.divHeight || this.chartHeight;
 
 			// Set the size on the tree container
 			this.container.style.width    = width  + "px";
@@ -512,8 +606,9 @@
 			args.width = args.width || this.defaultNodeWidth; //Width, height and color defaults...
 			args.height = args.height || this.defaultNodeHeight;
 
-			while (count-->0) {
-				if (this.nDatabaseNodes[count].id == args.pid) {
+			while (count > 0) {
+				count -= 1;
+				if (this.nDatabaseNodes[count].id === args.pid) {
 					args.parent = this.nDatabaseNodes[count];
 					break;
 				}
@@ -524,23 +619,29 @@
 			args.parent.children.push(node);
 			args.parent.canCollapse = true; //Has children so now it can collapse
 		},
-		selectAll: function () { (this.selectMode != "multiple") && this._selectAllInt(true); },
+		selectAll: function () {
+			if (this.selectMode !== "multiple") {
+				this._selectAllInt(true);
+			}
+		},
 		unselectAll: function () {	this._selectInternal(false); },
 		collapseAll: function () { this._collapseInternal(true); },
 		expandAll: function () { this._collapseInternal(false); },
 		collapseNode: function (nodeid, update) {
 			var dbindex = this.mapIDs[nodeid];
 			this.nDatabaseNodes[dbindex].isCollapsed = !this.nDatabaseNodes[dbindex].isCollapsed;
-			update && this.draw();
+			if (update) {
+				this.draw();
+			}
 		},
 		moveNode: function moveNode(node, newParent) {
 			var tmpNode, parent;
 			node = this.nDatabaseNodes[this.mapIDs[node]];
 			tmpNode = newParent = this.nDatabaseNodes[this.mapIDs[newParent]];
-			if(node.parent == newParent) { return 0; }
+			if (node.parent === newParent) { return 0; }
 			//first, make sure we are node tipping the tree over.  We can't make a node a child of its descendant
-			while(tmpNode.id != -1) {
-				if(tmpNode.id == node.id) { 
+			while (tmpNode.id !== -1) {
+				if (tmpNode.id === node.id) {
 					return false;
 				}
 				tmpNode = tmpNode.parent;
@@ -561,74 +662,15 @@
 		setNodeTitle: function setNodeTitle(nodeid, text, update) {
 			var dbindex = this.mapIDs[nodeid];
 			this.nDatabaseNodes[dbindex].text = text;
-			update && this.draw();
+			if (update) {
+				this.draw();
+			}
 		},
 		getSelectedNodes: function getSelectedNodes() {
 			return this.nDatabaseNodes.filter(isSelected);
 		}
 	};
 
-	/* Drag and drop utility functions, bound to the tree */
-	function arborDragStart(e) {
-		e.dataTransfer.setData("text/text", e.target.key);
-	}
-
-	function arborDragOver(e) {
-		if (e.preventDefault) {
-			e.preventDefault(); // Necessary. Allows us to drop.
-		}
-		e.dataTransfer.dropEffect = 'copy';
-		return false;
-	}
-
-	function arborDragEnter(e) {
-		if (e.target === this.container || e.target === this.canvas) {
-			var i, len, nodes = this.container.children;
-			for (i = 0, len = nodes.length; i < len; i += 1) {
-				nodes[i].classList.remove('over');
-				nodes[i].classList.remove('good');
-				nodes[i].classList.remove('bad');
-			}
-			return;
-		}
-		var treeNode = e.target.nodeType === Node.TEXT_NODE ? e.target.parentNode : e.target;
-		while (!treeNode.classList.contains("arbornode")) {
-			treeNode = treeNode.parent;
-		}
-		treeNode.classList.add('over');
-
-		return; 
-
-		var node = this.nDatabaseNodes[this.mapIDs[e.dataTransfer.getData("text/text")]];
-		var tmpNode = this.nDatabaseNodes[this.mapIDs[treeNode.key]];
-		//first, make sure we are node tipping the tree over.  We can't make a node a child of its descendant
-		while (tmpNode.id !== -1) {
-			if (tmpNode.id === node.id) { 
-				treeNode.classList.add("bad");
-				return false;
-			}
-			tmpNode = tmpNode.parent;
-		}
-		treeNode.classList.add("good");
-		return false;
-	}
-
-	function arborDrop(e) {
-		if (e.stopPropagation) {
-			e.stopPropagation(); // stops the browser from redirecting.
-		}
-		e.preventDefault();
-		this.moveNode(e.dataTransfer.getData("text/text"), e.target.key);
-		return false;
-	}
-
-	function arborDragEnd(e) {
-		var i, len, nodes = this.container.children;
-		for(i = 0, len = nodes.length; i < len; i += 1) {
-			nodes[i].classList.remove('over');
-		}
-	}
-
 	Arborescence.version = "0.9";
 	window.Arborescence = Arborescence;
-})();
+}(window, window.document));
