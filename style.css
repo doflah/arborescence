@@ -33,3 +33,11 @@ header {
 	background-color:lightgray;
 	border-radius:5px;
 }
+
+.tip {
+	font-style:italic;
+}
+
+header .sub {
+	color: #888888;
+}

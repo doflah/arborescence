@@ -2,15 +2,18 @@
 <html>
 <head>
 	<meta charset=utf-8 />
+	<title>Arborescence Demo</title>
 	<link rel=stylesheet type=text/css href=style.css />
 	<link rel=stylesheet type=text/css href=arbor.css />
 </head>
 <body>
 	<div class=container>
-		<header>Arboresence Test: Countries</header>
+		<header>Arboresence Demo | <span class=sub>Countries</span></header>
 		<form id=options class=content>
-			<input id=add type=button value="Add to tree"  />
-			<input id=fix type=button value="Fix the tree" /><br/>
+			<div>
+				<input id=add type=button value="Add to tree"  />
+				<input id=fix type=button value="Fix the tree" />
+			</div>
 			<div>
 				Orientation:
 				<label><input type=radio name=orientation value=top checked>Top</label>
@@ -24,6 +27,7 @@
 				<label><input type=radio name=justify value=center     >Center</label>
 				<label><input type=radio name=justify value=bottom     >Bottom</label>
 			</div>
+			<div class=tip>Drag and drop nodes onto other nodes to move them around the tree.</div>
 		</form>
 		<div class=content>
 			<div id=output></div>
