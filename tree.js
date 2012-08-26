@@ -96,7 +96,8 @@
 		selectMode : "multiple",  //none, single, multiple
 		collapsible: true,
 		chartHeight: -1,
-		chartWidth: -1
+		chartWidth: -1,
+		ordering: null
 	};
 	/* cheap hack to find the vendor prefix.  Until that day.  'Til all are one. */
 	for (i = 0; i < prefixes.length; i += 1) {
@@ -617,6 +618,10 @@
 			this.mapIDs[node.id] = this.nDatabaseNodes.length;
 			this.nDatabaseNodes.push(node);
 			args.parent.children.push(node);
+			/* This could easily be optimized by binary searching and inserting.  Maybe later. */
+			if (this.ordering) {
+				args.parent.children.sort(this.ordering);
+			}
 			args.parent.canCollapse = true; //Has children so now it can collapse
 		},
 		selectAll: function () {
@@ -649,6 +654,9 @@
 			parent = node.parent;
 			parent.children.splice(parent.children.indexOf(node), 1); //remove from old parent
 			newParent.children.push(node); //put in new parent
+			if(this.ordering) {
+				newParent.children.sort(this.ordering);
+			}
 			node.parent = newParent;
 			node.pid = newParent.id;
 			this.draw();

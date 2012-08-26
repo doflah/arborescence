@@ -9,6 +9,9 @@ var tree = new Arborescence(document.getElementById("output"), {
 	},
 	click: function(node) {
 		alert(node.text);
+	},
+	ordering: function(a, b) {
+		return a.id > b.id;
 	}
 }), toBeAdded = [
 	{ id: 'mi', pid:'fl', text:"Miami"},
@@ -17,7 +20,6 @@ var tree = new Arborescence(document.getElementById("output"), {
 	{ id: 'on', pid:'cn', text:"Ontario"},
 	{ id: 'eu',           text:"Europe"}
 ];
-
 
 tree.add({ id: 'na',           text:"North America"});
 tree.add({ id: 'us', pid:'na', text:"United States"});
